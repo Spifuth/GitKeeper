@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# GitKeeper pre-commit hook
+# Installed by: gitkeeper install-hooks
+
+set -euo pipefail
+
+# Find gitkeeper executable
+if command -v gitkeeper &>/dev/null; then
+    GITKEEPER="gitkeeper"
+elif [[ -x "./gitkeeper" ]]; then
+    GITKEEPER="./gitkeeper"
+elif [[ -x "$(git rev-parse --show-toplevel)/gitkeeper" ]]; then
+    GITKEEPER="$(git rev-parse --show-toplevel)/gitkeeper"
+else
+    echo "Error: gitkeeper not found in PATH"
+    exit 1
+fi
+
+exec "$GITKEEPER" check --scope staged

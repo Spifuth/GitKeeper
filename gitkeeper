@@ -1,0 +1,149 @@
+#!/usr/bin/env bash
+#
+# GitKeeper - Git repository quality gate
+# https://github.com/your-org/gitkeeper
+#
+# Main entry point - loads modules and dispatches commands
+#
+
+set -uo pipefail
+# Note: not using 'set -e' as rules return non-zero for warnings/failures
+
+#------------------------------------------------------------------------------
+# Bootstrap
+#------------------------------------------------------------------------------
+
+# Resolve script directory (follow symlinks)
+resolve_script_dir() {
+    local source="${BASH_SOURCE[0]}"
+    while [[ -L "$source" ]]; do
+        local dir
+        dir="$(cd -P "$(dirname "$source")" && pwd)"
+        source="$(readlink "$source")"
+        [[ "$source" != /* ]] && source="$dir/$source"
+    done
+    cd -P "$(dirname "$source")" && pwd
+}
+
+GITKEEPER_ROOT="$(resolve_script_dir)"
+GITKEEPER_LIB_DIR="$GITKEEPER_ROOT/lib"
+GITKEEPER_CMD_DIR="$GITKEEPER_ROOT/commands"
+
+export GITKEEPER_ROOT GITKEEPER_LIB_DIR GITKEEPER_CMD_DIR
+
+#------------------------------------------------------------------------------
+# Load modules
+#------------------------------------------------------------------------------
+
+# shellcheck source=lib/core.sh
+source "$GITKEEPER_LIB_DIR/core.sh"
+
+# shellcheck source=lib/config.sh
+source "$GITKEEPER_LIB_DIR/config.sh"
+
+# shellcheck source=lib/scope.sh
+source "$GITKEEPER_LIB_DIR/scope.sh"
+
+# shellcheck source=lib/runner.sh
+source "$GITKEEPER_LIB_DIR/runner.sh"
+
+#------------------------------------------------------------------------------
+# Load commands
+#------------------------------------------------------------------------------
+
+# shellcheck source=commands/check.sh
+source "$GITKEEPER_CMD_DIR/check.sh"
+
+# shellcheck source=commands/init.sh
+source "$GITKEEPER_CMD_DIR/init.sh"
+
+# shellcheck source=commands/install-hooks.sh
+source "$GITKEEPER_CMD_DIR/install-hooks.sh"
+
+# shellcheck source=commands/explain.sh
+source "$GITKEEPER_CMD_DIR/explain.sh"
+
+# shellcheck source=commands/configure.sh
+source "$GITKEEPER_CMD_DIR/configure.sh"
+
+# shellcheck source=commands/help.sh
+source "$GITKEEPER_CMD_DIR/help.sh"
+
+#------------------------------------------------------------------------------
+# Main
+#------------------------------------------------------------------------------
+
+main() {
+    # Must be in a git repo (except for help/version)
+    local cmd="${1:-help}"
+    
+    case "$cmd" in
+        help|--help|-h|version|--version|-V)
+            ;;
+        *)
+            require_git_repo
+            ;;
+    esac
+    
+    # Parse global options
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --config)
+                export GITKEEPER_CONFIG_FILE="$2"
+                shift 2
+                ;;
+            --config=*)
+                export GITKEEPER_CONFIG_FILE="${1#--config=}"
+                shift
+                ;;
+            -v|--verbose)
+                export GITKEEPER_VERBOSE=1
+                shift
+                ;;
+            -*)
+                # Let commands handle their own options
+                break
+                ;;
+            *)
+                break
+                ;;
+        esac
+    done
+    
+    # Get command
+    cmd="${1:-help}"
+    shift || true
+    
+    # Dispatch command
+    case "$cmd" in
+        check)
+            cmd_check "$@"
+            ;;
+        init)
+            cmd_init "$@"
+            ;;
+        install-hooks|install)
+            cmd_install_hooks "$@"
+            ;;
+        uninstall-hooks|uninstall)
+            cmd_uninstall_hooks "$@"
+            ;;
+        explain|debug)
+            cmd_explain "$@"
+            ;;
+        configure|config)
+            cmd_configure "$@"
+            ;;
+        version|--version|-V)
+            cmd_version
+            ;;
+        help|--help|-h)
+            cmd_help
+            ;;
+        *)
+            die "unknown command: $cmd (try 'gitkeeper help')"
+            ;;
+    esac
+}
+
+main "$@"
