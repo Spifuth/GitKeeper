@@ -145,8 +145,11 @@ get_scope_diff() {
             git diff "$range" 2>/dev/null
             ;;
         all)
-            # For 'all' scope, show uncommitted changes
-            git diff HEAD 2>/dev/null
+            # Return empty: get_scope_files for 'all' uses git ls-files (every
+            # tracked file), so returning only uncommitted changes here would
+            # give mismatched data. Content-based rules must use get_scope_files
+            # for this scope instead of get_scope_diff.
+            echo ""
             ;;
         *)
             die "unknown scope: $scope"

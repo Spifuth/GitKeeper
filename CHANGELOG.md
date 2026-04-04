@@ -8,9 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 - Modular architecture with lib/, commands/, ules/ directories
-- Core CLI commands: check, init, configure, install-hooks, xplain, help
-- Built-in rules: secrets, orbid_files, changelog, ersion, eadme, 	odos, ranch_name, large_files, merge_conflict
-- Scopes: staged, push, pr, stash, ange
+- Core CLI commands: check, init, configure, install-hooks, explain, help
+- Built-in rules: secrets, forbid_files, changelog, version, readme, todos, branch_name, large_files, merge_conflict
+- Scopes: staged, push, pr, stash, range
 - Interactive configuration wizard (gitkeeper configure)
 - Git hooks integration: pre-commit and pre-push
 - Bash and Zsh shell completions

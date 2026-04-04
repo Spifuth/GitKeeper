@@ -16,6 +16,9 @@ rule_secrets() {
         return 3
     fi
     
+    # Single quote for use in POSIX ERE patterns (Bash ERE does not interpret \x27)
+    local q="'"
+
     # Built-in patterns for common secrets
     local -a patterns=(
         # AWS
@@ -46,10 +49,10 @@ rule_secrets() {
         '-----BEGIN (RSA |DSA |EC |OPENSSH |PGP )?PRIVATE KEY'
         
         # Generic patterns (high confidence)
-        'password\s*[:=]\s*["\x27][^"\x27\s]{8,}["\x27]'
-        'api[_-]?key\s*[:=]\s*["\x27][a-zA-Z0-9_\-]{20,}["\x27]'
-        'secret\s*[:=]\s*["\x27][^"\x27\s]{8,}["\x27]'
-        'token\s*[:=]\s*["\x27][a-zA-Z0-9_\-]{20,}["\x27]'
+        "password\\s*[:=]\\s*[\"$q][^\"$q\\s]{8,}[\"$q]"
+        "api[_-]?key\\s*[:=]\\s*[\"$q][a-zA-Z0-9_\\-]{20,}[\"$q]"
+        "secret\\s*[:=]\\s*[\"$q][^\"$q\\s]{8,}[\"$q]"
+        "token\\s*[:=]\\s*[\"$q][a-zA-Z0-9_\\-]{20,}[\"$q]"
     )
     
     # Add custom patterns from config

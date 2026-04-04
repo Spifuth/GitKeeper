@@ -104,6 +104,13 @@ parse_config() {
             log_debug "config: $key = $value"
         fi
     done < "$config_file"
+
+    # Validate fail_on
+    case "$GITKEEPER_FAIL_ON" in
+        error|warn) ;;
+        *) log_warn "Unknown fail_on value: '$GITKEEPER_FAIL_ON', defaulting to 'error'"
+           GITKEEPER_FAIL_ON="error" ;;
+    esac
 }
 
 #------------------------------------------------------------------------------

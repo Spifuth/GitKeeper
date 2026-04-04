@@ -74,17 +74,6 @@ source "$GITKEEPER_CMD_DIR/help.sh"
 #------------------------------------------------------------------------------
 
 main() {
-    # Must be in a git repo (except for help/version)
-    local cmd="${1:-help}"
-    
-    case "$cmd" in
-        help|--help|-h|version|--version|-V)
-            ;;
-        *)
-            require_git_repo
-            ;;
-    esac
-    
     # Parse global options
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -109,10 +98,19 @@ main() {
                 ;;
         esac
     done
-    
+
     # Get command
-    cmd="${1:-help}"
+    local cmd="${1:-help}"
     shift || true
+
+    # Must be in a git repo (except for help/version)
+    case "$cmd" in
+        help|--help|-h|version|--version|-V)
+            ;;
+        *)
+            require_git_repo
+            ;;
+    esac
     
     # Dispatch command
     case "$cmd" in
