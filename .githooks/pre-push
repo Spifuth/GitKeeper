@@ -1,19 +1,20 @@
 #!/usr/bin/env bash
+#
 # GitKeeper pre-push hook
-# Installed by: gitkeeper install-hooks
+# Runs: gitkeeper check --scope push
+#
 
 set -euo pipefail
 
-# Find gitkeeper executable
-if command -v gitkeeper &>/dev/null; then
-    GITKEEPER="gitkeeper"
-elif [[ -x "./gitkeeper" ]]; then
-    GITKEEPER="./gitkeeper"
-elif [[ -x "$(git rev-parse --show-toplevel)/gitkeeper" ]]; then
-    GITKEEPER="$(git rev-parse --show-toplevel)/gitkeeper"
-else
-    echo "Error: gitkeeper not found in PATH"
-    exit 1
+# Find gitkeeper
+GITKEEPER="$(git rev-parse --show-toplevel)/gitkeeper"
+if [[ ! -x "$GITKEEPER" ]] && ! command -v gitkeeper &>/dev/null; then
+    if [[ -x "$(git rev-parse --show-toplevel)/gitkeeper" ]]; then
+        GITKEEPER="$(git rev-parse --show-toplevel)/gitkeeper"
+    else
+        echo "Error: gitkeeper not found" >&2
+        exit 1
+    fi
 fi
 
 exec "$GITKEEPER" check --scope push
