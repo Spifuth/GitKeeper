@@ -15,9 +15,10 @@ declare -A RULE_DESCRIPTIONS=(
     [branch_name]="Enforce branch naming conventions"
     [large_files]="Prevent large files from being committed"
     [merge_conflict]="Detect leftover merge conflict markers"
+    [no_debug]="Block debug statements (console.log, pdb, var_dump, …)"
 )
 
-RULE_ORDER=(secrets forbid_files merge_conflict large_files changelog version readme todos branch_name)
+RULE_ORDER=(secrets forbid_files merge_conflict large_files no_debug changelog version readme todos branch_name)
 
 #------------------------------------------------------------------------------
 # Menu helpers

@@ -158,3 +158,68 @@ config_get_rules() {
 config_fail_on_warn() {
     [[ "$GITKEEPER_FAIL_ON" == "warn" ]]
 }
+
+#------------------------------------------------------------------------------
+# Per-directory config support
+#------------------------------------------------------------------------------
+
+# Find the nearest .gitkeeper.conf for a given file path (relative to repo root).
+# Searches from the file's directory upward, stopping at repo root.
+# Does NOT return the root config itself — only configs deeper than it.
+# Usage: find_dir_config_for_file "src/api/routes.js" "/path/to/repo" "/path/to/repo/.gitkeeper.conf"
+find_dir_config_for_file() {
+    local file_path="$1"
+    local repo_root="$2"
+    local root_config="${3:-}"
+
+    local dir
+    dir="$(dirname "$file_path")"
+
+    # Walk upward from the file's directory until we reach the repo root
+    while [[ "$dir" != "." && "$dir" != "" ]]; do
+        local candidate="$repo_root/$dir/$GITKEEPER_CONFIG_NAME"
+        if [[ -f "$candidate" && "$candidate" != "$root_config" ]]; then
+            echo "$candidate"
+            return 0
+        fi
+        dir="$(dirname "$dir")"
+    done
+
+    return 1  # no subdirectory config found — use root
+}
+
+# Apply a config file as an overlay on top of the currently loaded config.
+# Only keys explicitly set in the overlay file are updated; everything else
+# inherits from the previously parsed root config.
+apply_config_overlay() {
+    local overlay_file="$1"
+
+    if [[ ! -f "$overlay_file" ]]; then
+        return 0
+    fi
+
+    log_debug "config: applying overlay $overlay_file"
+
+    local line_num=0
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        ((line_num++)) || true
+        [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+
+        if [[ "$line" =~ ^[[:space:]]*([a-zA-Z_][a-zA-Z0-9_]*)[[:space:]]*=[[:space:]]*(.*) ]]; then
+            local key="${BASH_REMATCH[1]}"
+            local value
+            value="$(echo "${BASH_REMATCH[2]}" | sed 's/#.*$//' | xargs)"
+
+            GITKEEPER_CONFIG["$key"]="$value"
+
+            case "$key" in
+                rules)         GITKEEPER_RULES="$value" ;;
+                fail_on)       GITKEEPER_FAIL_ON="$value" ;;
+                check_stash)   GITKEEPER_CHECK_STASH="$value" ;;
+                stash_fail_on) GITKEEPER_STASH_FAIL_ON="$value" ;;
+            esac
+
+            log_debug "config overlay: $key = $value"
+        fi
+    done < "$overlay_file"
+}
