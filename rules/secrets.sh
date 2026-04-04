@@ -49,10 +49,12 @@ rule_secrets() {
         '-----BEGIN (RSA |DSA |EC |OPENSSH |PGP )?PRIVATE KEY'
         
         # Generic patterns (high confidence)
-        "password\\s*[:=]\\s*[\"$q][^\"$q\\s]{8,}[\"$q]"
-        "api[_-]?key\\s*[:=]\\s*[\"$q][a-zA-Z0-9_\\-]{20,}[\"$q]"
-        "secret\\s*[:=]\\s*[\"$q][^\"$q\\s]{8,}[\"$q]"
-        "token\\s*[:=]\\s*[\"$q][a-zA-Z0-9_\\-]{20,}[\"$q]"
+        # Note: \s works outside bracket expressions in GNU grep ERE, but inside
+        # a bracket expression it is not portable — use [[:space:]] instead.
+        "password\\s*[:=]\\s*[\"$q][^\"$q[:space:]]{8,}[\"$q]"
+        "api[_-]?key\\s*[:=]\\s*[\"$q][a-zA-Z0-9_-]{20,}[\"$q]"
+        "secret\\s*[:=]\\s*[\"$q][^\"$q[:space:]]{8,}[\"$q]"
+        "token\\s*[:=]\\s*[\"$q][a-zA-Z0-9_-]{20,}[\"$q]"
     )
     
     # Add custom patterns from config
