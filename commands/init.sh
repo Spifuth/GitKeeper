@@ -33,7 +33,12 @@ cmd_init() {
     # Generate config
     cat > "$output" << 'EOF'
 # GitKeeper Configuration
-# https://github.com/your-org/gitkeeper
+# https://github.com/Spifuth/GitKeeper
+#
+# Every rule below is annotated with the incident that justifies it. That is
+# deliberate: a config full of settings nobody remembers the reason for gets
+# loosened the first time it is inconvenient. If you are about to relax
+# something here, the comment tells you what you are re-enabling.
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Rules
@@ -41,7 +46,7 @@ cmd_init() {
 
 # Comma-separated list of rules to run
 # Available: secrets, forbid_files, changelog, version, readme, todos,
-#            branch_name, large_files, merge_conflict
+#            branch_name, large_files, merge_conflict, no_debug, lint_errors
 rules=secrets,forbid_files,merge_conflict,large_files
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -49,6 +54,10 @@ rules=secrets,forbid_files,merge_conflict,large_files
 # ─────────────────────────────────────────────────────────────────────────────
 
 # When to fail: error | warn
+#
+# WHY error, not warn: a gate that prints a warning and lets the commit through
+# is a log line, not a control. The whole value is that it stops you on the
+# night you are tired enough to click past a warning.
 fail_on=error
 
 # Stash checking (optional audit mode)
@@ -59,23 +68,100 @@ stash_fail_on=warn
 # Rule Parameters
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Custom patterns for secret detection (comma-separated regex)
-# pattern_secrets=CUSTOM_API_[A-Z0-9]{32},MY_SECRET_[a-z]+
+# --- secrets -----------------------------------------------------------------
+#
+# MEASURED 2026-08-30, because "it has a secrets rule" is a different claim from
+# "it catches secrets". Planted one of each credential type and checked:
+#
+#   caught  : GitHub PAT, GitLab PAT, Slack token, AWS key ID, password = "..."
+#   MISSED  : AWS *secret* access key (the dangerous half of the pair)
+#   MISSED  : -----BEGIN ... PRIVATE KEY----- blocks
+#   MISSED  : JWTs
+#
+# forbid_files does not cover the private-key case either: it matches on
+# FILENAME, so a key pasted into a .md or .txt walks straight through. The three
+# patterns below close those gaps and were each re-tested until they reported
+# CAUGHT.
+#
+# TWO SHARP EDGES, both learned the hard way:
+#
+#   1. A pattern starting with "-" FAILS OPEN and still prints a clean pass.
+#      The leading dashes reach grep as an option rather than a pattern. That is
+#      why the private-key pattern below has no leading dashes. A security tool
+#      that fails open and prints a tick is worse than no tool, because it is
+#      trusted.
+#
+#   2. This file is COMMA-SEPARATED, so no regex may contain a comma. That rules
+#      out {n,} quantifiers -- write {n}X* instead.
+#
+#   3. A bare double quote in a pattern breaks the same way: it reaches xargs
+#      unbalanced, xargs aborts, and the custom patterns are silently skipped
+#      while the rule still reports a clean pass. Escape it as \" -- as below.
+#      Caught 2026-09-04 by planting each credential individually; the
+#      unescaped version missed the AWS key and the JWT while printing a tick.
+pattern_secrets=BEGIN [A-Z ]*PRIVATE KEY,aws_secret_access_key['\"]?\s*[=:]\s*['\"]?[A-Za-z0-9/+=]{40},eyJ[A-Za-z0-9_-]{10}[A-Za-z0-9_-]*\.eyJ[A-Za-z0-9_-]{10}[A-Za-z0-9_-]*\.
 
-# Forbidden file patterns (comma-separated regex)
-# pattern_forbid_files=\.secret$,private/.*
+# --- forbid_files ------------------------------------------------------------
+#
+# These files are normally gitignored. This rule is the backstop for the day
+# someone runs `git add -f`, or -- more likely -- for the day the .gitignore
+# that excluded them is itself deleted.
+#
+# THAT IS NOT HYPOTHETICAL. On 2026-09-04 a commit removing a directory also
+# removed the .gitignore inside it, which was the only thing excluding that
+# directory's build output. The next "stage everything" swept in 482 files.
+# A guard that lives inside the thing it guards dies with it; this rule and the
+# root .gitignore are the two that survive.
+pattern_forbid_files=(^|/)\.env$,(^|/)\.env\..*,(^|/)\.infisical-auth$,(^|/)acme\.json$,\.(key|pem|p12|pfx)$,(^|/)machinekey/,(^|/)\.secrets\.ya?ml$
 
-# Branch naming convention (regex)
-# pattern_branch_name=(feature|bugfix|hotfix|release|chore)/[a-z0-9-]+
+# --- large_files -------------------------------------------------------------
+#
+# Default 5 MB. Leave it there.
+#
+# On 2026-09-04 a commit put 482 build-artifact files -- 81 MB -- onto a PUBLIC
+# repo's main line. The largest single file was 23.79 MB, so this rule at its
+# default would have blocked the commit outright.
+#
+# It did not run. The pull request installing GitKeeper ON THAT REPO was still
+# open, sitting in a merge queue behind routine chores, and was merged about
+# twenty minutes too late. The control existed, was correct, and was unmerged.
+#
+# The lesson is not about the threshold. An unmerged safety control is not a
+# backlog item, it is an absent control.
+# pattern_large_files=5242880
 
-# Max file size in bytes (default: 5MB = 5242880)
-# pattern_large_files=10485760
+# --- merge_conflict ----------------------------------------------------------
+#
+# Catches leftover <<<<<<< / ======= / >>>>>>> markers. No local incident, kept
+# on because it is free and the failure it prevents is embarrassing in public.
 
-# File patterns that trigger changelog requirement
+# --- branch_name (off by default) --------------------------------------------
+#
+# Enable where the repo has a release branch that must not be committed to
+# directly. This estate's rule is: feature branches are cut from `dev` and their
+# PRs target `dev`; `main` is release-only. It has been gotten wrong at least
+# once -- a PR opened against `main` instead of `dev` -- so if a repo enforces
+# it anywhere, enforce it here.
+# pattern_branch_name=(feat|fix|chore|docs|refactor|build|ci|test)/[a-z0-9._-]+
+
+# --- changelog / version / readme / todos (off by default) -------------------
+#
+# Useful on released software, noise on an application repo. Turn on per repo
+# rather than globally.
 # trigger_changelog=\.(js|ts|py|go|rs|java|rb|php)$
-
-# Version files to check for updates
 # required_version=package.json,version.txt,VERSION
+
+# ─────────────────────────────────────────────────────────────────────────────
+# IMPORTANT: this file alone protects nothing
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# `install-hooks` sets core.hooksPath, which is LOCAL git config and does NOT
+# travel with the repository. Anyone who clones this repo -- including you, on a
+# new machine -- must run `gitkeeper install-hooks` or the hooks are inert.
+#
+# An inert hook looks exactly like a working one: silence. Verify with
+#     git config core.hooksPath     # expect: .githooks
+# and confirm .githooks/ actually contains pre-commit and pre-push.
 EOF
 
     log_success "Created $output"
