@@ -137,16 +137,21 @@
         "main": {
           "checks": [
             "lint",
-            "test"
+            "test",
+            "example-report"
           ],
-          "verified": "2026-09-09 — ci.yml: pull_request.branches = [main]"
+          "verified": "2026-09-09 — ci.yml: pull_request.branches = [main, dev] depuis PR #3"
         },
         "dev": {
-          "checks": [],
-          "blocked_on": "ci.yml's pull_request trigger lists [main] only, so no check would ever report on a PR to dev and requiring one would deadlock the branch. PR #3 widens it to [main, dev]; once merged, restore [\"lint\", \"test\"] here and re-run."
+          "checks": [
+            "lint",
+            "test",
+            "example-report"
+          ],
+          "verified": "2026-09-09 — ci.yml: pull_request.branches = [main, dev] depuis PR #3"
         }
       },
-      "note": "Two jobs are deliberately absent from the required checks. `release` never runs on a pull request. And `example-report` calls the live open-meteo API: it failed on a 502 during PR #3 on 2026-09-09, with nothing wrong in the code. A required check that reaches a third party gates your merges on somebody else's uptime — keep it running and visible, never required."
+      "note": "`release` reste hors des checks requis : il ne tourne jamais sur une pull request. `example-report` y est revenu le 2026-09-09 après City-Compare#4 : il appelle Nominatim et Open-Meteo, mais une panne de l'un ou l'autre sort désormais en EX_TEMPFAIL (75) et l'étape CI la traite comme un saut avec une annotation. Il ne peut donc plus échouer sur la disponibilité d'un tiers — seulement sur une vraie régression, ce qui est exactement ce qu'un check requis doit faire. Avant ce correctif il était retiré, et il avait raison de l'être."
     }
   },
   "excluded": {
