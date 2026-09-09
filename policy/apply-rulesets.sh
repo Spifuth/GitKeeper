@@ -162,6 +162,17 @@ build_payload() {
     }'
 }
 
+build_tag_payload() {
+    jq -n '{
+      name: "protected-tags",
+      target: "tag",
+      enforcement: "active",
+      bypass_actors: [],
+      conditions: { ref_name: { include: ["~ALL"], exclude: [] } },
+      rules: [ { type: "deletion" }, { type: "update" } ]
+    }'
+}
+
 exit_code=0
 withheld_total=0
 
@@ -266,6 +277,39 @@ for repo in $(jq -r '.repos | keys[]' "$POLICY"); do
             ;;
         esac
     done
+
+    # Tags, opt-in per repository. A tag ruleset has no status checks and no
+    # pull requests — the only thing worth saying about a release tag is that
+    # it may not be moved or deleted, so that the version somebody installed
+    # keeps pointing at the code it claimed to.
+    if [[ "$(jq -r --arg r "$repo" '.repos[$r].protect_tags // false' "$POLICY")" == "true" ]]; then
+        tag_id="$(ruleset_id_named "$repo" "protected-tags")"
+        case "$MODE" in
+        verify)
+            if [[ -z "$tag_id" ]]; then
+                echo "   ✗ tags — no 'protected-tags' ruleset"
+                exit_code=1
+            else
+                gh api "repos/$OWNER/$repo/rulesets/$tag_id" --jq \
+                  '"   ✓ tags id=\(.id) \(.enforcement) bypass=\(.bypass_actors|length) rules=\([.rules[].type]|join(\",\"))"'
+            fi
+            ;;
+        dry-run)
+            echo "   → tags: would $([[ -n "$tag_id" ]] && echo "update $tag_id" || echo "create")"
+            ;;
+        apply)
+            if [[ -n "$tag_id" ]]; then
+                build_tag_payload | gh api -X PUT "repos/$OWNER/$repo/rulesets/$tag_id" \
+                    --input - --jq '"   ✓ tags updated ruleset \(.id)"' || {
+                    echo "   ✗ tags — update failed"; exit_code=1; }
+            else
+                build_tag_payload | gh api -X POST "repos/$OWNER/$repo/rulesets" \
+                    --input - --jq '"   ✓ tags created ruleset \(.id)"' || {
+                    echo "   ✗ tags — create failed"; exit_code=1; }
+            fi
+            ;;
+        esac
+    fi
 done
 
 echo
