@@ -1,0 +1,156 @@
+{
+  "$comment": [
+    "Target branch-protection state for every public repository on this account.",
+    "",
+    "ONE RULESET PER BRANCH, named protected-<branch>. A ruleset applies one set",
+    "of rules to every ref it covers, so main and dev cannot require different",
+    "checks inside a single one — and they routinely need to, because a CI",
+    "trigger often lists one branch and not the other.",
+    "",
+    "NO BYPASS ACTOR. The rules apply to the owner exactly as they apply to a",
+    "contributor. That is only workable because required_approving_review_count",
+    "is 0: with a single collaborator GitHub forbids approving your own pull",
+    "request, so any non-zero count makes the rule unsatisfiable and forces a",
+    "bypass on every merge. The guarantee that nobody merges in your place is",
+    "not the review count — it is that nobody else has write access.",
+    "",
+    "`checks` is a TARGET, not a promise. A required status check is matched by",
+    "context name; require one that never reports on that branch and every pull",
+    "request to it becomes permanently unmergeable, with 'Expected — Waiting for",
+    "status to be reported' and no error anywhere. apply-rulesets.sh therefore",
+    "only requires a context it has evidence for:",
+    "",
+    "  tier 1  a pull request targeting that branch has reported it",
+    "  tier 2  a branch's `verified` field records a human reading the workflow",
+    "          trigger and confirming it covers THAT branch, with the date",
+    "",
+    "Anything with neither is withheld and printed. Re-run after a CI change."
+  ],
+  "repos": {
+    "brutalist-lycee": {
+      "branches": {
+        "main": {
+          "checks": [
+            "build",
+            "style-gate"
+          ],
+          "verified": "2026-09-09 — ci.yml: pull_request.branches = [dev, main]"
+        },
+        "dev": {
+          "checks": [
+            "build",
+            "style-gate"
+          ],
+          "verified": "2026-09-09 — ci.yml: pull_request.branches = [dev, main]"
+        }
+      }
+    },
+    "GitKeeper": {
+      "branches": {
+        "main": {
+          "checks": [
+            "shellcheck",
+            "tests"
+          ],
+          "verified": "2026-09-09 — ci.yml: pull_request has no branches filter"
+        }
+      },
+      "note": "dev is excluded on purpose: it has diverged from main by 8 commits each way and carries only duplicated 'remove docs/' commits plus wiki pages that now live in the GitHub wiki. Protecting an abandoned branch documents it as live. Decide whether to delete it or reset it onto main."
+    },
+    "FenrirBot": {
+      "branches": {
+        "main": {
+          "checks": [
+            "lint",
+            "test"
+          ],
+          "verified": "2026-09-09 — ci.yml: pull_request has no branches filter"
+        },
+        "dev": {
+          "checks": [
+            "lint",
+            "test"
+          ],
+          "verified": "2026-09-09 — ci.yml: pull_request has no branches filter"
+        }
+      }
+    },
+    "Spifuth": {
+      "branches": {
+        "main": {
+          "checks": []
+        }
+      },
+      "note": "The profile README repository. No workflow, so no check to require — the branch rules still block deletion, force-push and direct pushes."
+    },
+    "TermWall": {
+      "branches": {
+        "main": {
+          "checks": [
+            "ShellCheck",
+            "Smoke Test"
+          ],
+          "verified": "2026-09-09 — shellcheck.yml: pull_request.branches = [main, master]"
+        }
+      }
+    },
+    "AutoVault": {
+      "branches": {
+        "main": {
+          "checks": [
+            "CI Summary"
+          ],
+          "verified": "2026-09-09 — tests.yml: pull_request.branches = [main, dev]"
+        },
+        "dev": {
+          "checks": [
+            "CI Summary"
+          ],
+          "verified": "2026-09-09 — tests.yml: pull_request.branches = [main, dev]"
+        }
+      },
+      "note": "tests.yml produces 12 contexts; only the aggregate 'CI Summary' is required. release.yml is deliberately absent — it triggers on v* tags only, so requiring it would block every pull request forever."
+    },
+    "SockMap": {
+      "branches": {
+        "main": {
+          "checks": [
+            "🐍 Backend Tests",
+            "🎨 Frontend Tests",
+            "🐳 Docker Build"
+          ],
+          "verified": "2026-09-09 — ci.yml: pull_request.branches = [main, dev]"
+        },
+        "dev": {
+          "checks": [
+            "🐍 Backend Tests",
+            "🎨 Frontend Tests",
+            "🐳 Docker Build"
+          ],
+          "verified": "2026-09-09 — ci.yml: pull_request.branches = [main, dev]"
+        }
+      },
+      "note": "The publish and release jobs live in the same workflow but carry an `if:` that skips them on a pull request, and a skipped check counts as passing — they are still not required, because a required context should not depend on a conditional staying conditional. The emoji are part of the context names: rename one and the requirement silently stops matching."
+    },
+    "City-Compare": {
+      "branches": {
+        "main": {
+          "checks": [
+            "lint",
+            "test",
+            "example-report"
+          ],
+          "verified": "2026-09-09 — ci.yml: pull_request.branches = [main]"
+        },
+        "dev": {
+          "checks": [],
+          "blocked_on": "ci.yml's pull_request trigger lists [main] only, so no check would ever report on a PR to dev and requiring one would deadlock the branch. PR #3 widens it to [main, dev]; once merged, restore [\"lint\", \"test\", \"example-report\"] here and re-run."
+        }
+      },
+      "note": "release.yml is deliberately absent from the checks: it triggers on pushes to main and via workflow_dispatch, never on a pull request."
+    }
+  },
+  "excluded": {
+    "mx-division-builds": "A fork of somebody else's project. Branch rules there mostly get in the way of rebasing onto upstream, to protect code you do not maintain."
+  }
+}
