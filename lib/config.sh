@@ -47,6 +47,38 @@ find_config() {
 }
 
 #------------------------------------------------------------------------------
+# Config value cleaning
+#------------------------------------------------------------------------------
+
+# Turns the raw right-hand side of a `key=value` line into the value itself.
+#
+# This used to be `echo "$value" | sed 's/#.*$//' | xargs`, and both stages
+# were wrong in a way nothing reported:
+#
+#   xargs applies shell word-splitting and quote processing to text that is
+#   not a shell word. It ate the escapes out of every pattern before the
+#   pattern was ever compiled — `st\.` became `st.` (any character, hence the
+#   false positive on `const runway…`), `\s` became a literal `s`, and
+#   `['\"]?` lost its single-quote alternative, so `aws_secret_access_key='…'`
+#   simply stopped being detected. Which characters survived depended on the
+#   quote parity earlier in the line, so the damage was not even consistent.
+#   On an unbalanced quote, xargs aborts and the value lands empty.
+#
+#   `sed 's/#.*$//'` truncates at the first `#` anywhere, so a pattern like
+#   `^#!/bin/bash$` was deleted rather than de-commented.
+#
+# A comment now has to be introduced by whitespace, which is the usual
+# convention and leaves a `#` inside a value alone. Trimming is done by the
+# repository's own trim(), which is pure parameter expansion and touches
+# nothing else — the rest of the codebase already used it.
+_config_clean_value() {
+    local raw="$1"
+    # Strip an inline comment: whitespace followed by # and the rest of line.
+    raw="${raw%%[[:space:]]#*}"
+    trim "$raw"
+}
+
+#------------------------------------------------------------------------------
 # Config parsing
 #------------------------------------------------------------------------------
 
@@ -67,10 +99,7 @@ parse_config() {
     
     log_debug "config: loading $config_file"
     
-    local line_num=0
     while IFS= read -r line || [[ -n "$line" ]]; do
-        ((line_num++))
-        
         # Skip empty lines and comments
         [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
         
@@ -80,7 +109,7 @@ parse_config() {
             local value="${BASH_REMATCH[2]}"
             
             # Trim trailing comments and whitespace
-            value="$(echo "$value" | sed 's/#.*$//' | xargs)"
+            value="$(_config_clean_value "$value")"
             
             # Store in associative array
             GITKEEPER_CONFIG["$key"]="$value"
@@ -200,15 +229,13 @@ apply_config_overlay() {
 
     log_debug "config: applying overlay $overlay_file"
 
-    local line_num=0
     while IFS= read -r line || [[ -n "$line" ]]; do
-        ((line_num++)) || true
         [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
 
         if [[ "$line" =~ ^[[:space:]]*([a-zA-Z_][a-zA-Z0-9_]*)[[:space:]]*=[[:space:]]*(.*) ]]; then
             local key="${BASH_REMATCH[1]}"
             local value
-            value="$(echo "${BASH_REMATCH[2]}" | sed 's/#.*$//' | xargs)"
+            value="$(_config_clean_value "${BASH_REMATCH[2]}")"
 
             GITKEEPER_CONFIG["$key"]="$value"
 

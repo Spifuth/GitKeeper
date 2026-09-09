@@ -29,3 +29,20 @@ jobs:
         # syntax / regex bracket-expression parsing, not bugs) before excluding.
         # See PR description for full counts and investigation.
         run: shellcheck -S error --exclude=SC1087 gitkeeper $(find lib rules commands -name '*.sh')
+
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install bats-core
+        # Cloned rather than pulled from a third-party action: this repository
+        # is a secret scanner, and the shorter its CI supply chain the better.
+        # Pinned to a tag so a compromised upstream default branch cannot walk
+        # straight into the job.
+        run: |
+          git clone --depth 1 --branch v1.14.0 \
+            https://github.com/bats-core/bats-core.git "$RUNNER_TEMP/bats"
+          echo "$RUNNER_TEMP/bats/bin" >> "$GITHUB_PATH"
+      - name: Run the test suite
+        run: bats --recursive tests/

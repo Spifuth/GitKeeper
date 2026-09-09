@@ -307,6 +307,22 @@ git config --unset core.hooksPath
 rm -rf .githooks/
 ```
 
+## Tests
+
+The suite runs with [bats-core](https://github.com/bats-core/bats-core) 1.9+
+and needs no network and no real git remotes.
+
+```bash
+git clone --depth 1 https://github.com/bats-core/bats-core ~/.bats
+export PATH="$HOME/.bats/bin:$PATH"
+
+bats --recursive tests/
+```
+
+`--recursive` is not optional: the suite is laid out as `tests/lib/` and
+`tests/rules/`, and `bats tests/` alone finds nothing and exits 0 — a green
+run that tested nothing at all.
+
 ## License
 
 MIT
