@@ -19,6 +19,14 @@
 #
 # So a context is only required when there is evidence for it:
 #
+#   first, always: a workflow on one of this repository's protected branches
+#   declares the job. Observing that a context can report on some pull request
+#   is not evidence that it will report on the next one — a job added by an
+#   unmerged pull request reports on that pull request and nowhere else. This
+#   condition is not optional; the first version of this script omitted it and
+#   deadlocked GitKeeper's own PR #5.
+#
+#   then one of:
 #   tier 1  a pull request targeting that branch has actually reported it
 #   tier 2  the branch carries a dated `verified` note in policy.json — a human
 #           read the workflow trigger and confirmed it covers THAT branch
@@ -63,6 +71,53 @@ observed_checks() {
         gh api "repos/$OWNER/$repo/commits/$sha/check-runs?per_page=100" \
             --jq '.check_runs[].name' 2>/dev/null
     done <<< "$shas" | sort -u
+}
+
+# True when any branch this repository protects declares a job producing $2.
+#
+# THIS FUNCTION EXISTS BECAUSE THE FIRST VERSION OF THIS SCRIPT SHIPPED THE
+# DEADLOCK IT WAS WRITTEN TO PREVENT.
+#
+# The evidence rule used to be "a pull request targeting this branch reported
+# this context". GitKeeper's `tests` job satisfied it — reported by PR #4, the
+# pull request that *introduced* the job. `tests` was therefore required on
+# main while the job existed nowhere but inside that one unmerged branch, and
+# the next pull request, cut before #4 landed, hung on a check that could never
+# report. Observing that a context CAN report on some pull request is not
+# evidence that it WILL report on the next one.
+#
+# Why "any protected branch" and not "the base branch". A `pull_request` run
+# uses the workflow files of the MERGE of head into base, not of base alone. So
+# a repository whose `main` predates its CI — brutalist-lycee and FenrirBot
+# both do, `main` there has no workflow directory at all — still runs the jobs
+# perfectly well on a pull request from `dev`, because the merge commit carries
+# dev's workflow. Grepping the base alone withholds those wrongly.
+#
+# Residual risk, stated rather than papered over: a pull request opened from a
+# branch cut before the job existed still deadlocks, because the merge commit
+# will not contain it either. That is unknowable when the ruleset is written.
+# The cure is `--verify` plus merging your open pull requests, not a cleverer
+# prediction.
+#
+# A grep rather than a YAML parser on purpose: the question is only "does this
+# repository know about this job", and a parser wrong in a subtle way would be
+# worse than one line of grep.
+declared_in_repo() {
+    local repo="$1" context="$2" branch wf body pattern
+    pattern="$(printf '%s' "$context" | sed 's/[][\.*^$/]/\\&/g')"
+    for branch in $(jq -r --arg r "$repo" '.repos[$r].branches | keys[]' "$POLICY"); do
+        for wf in $(gh api "repos/$OWNER/$repo/actions/workflows" \
+                      --jq '.workflows[]? | select(.state=="active") | .path' 2>/dev/null); do
+            body="$(gh api "repos/$OWNER/$repo/contents/$wf?ref=$branch" --jq '.content' 2>/dev/null \
+                     | base64 -d 2>/dev/null)" || continue
+            # Either the job id (`  tests:`) or its display name (`name: CI Summary`).
+            if grep -qE "^[[:space:]]{2}${pattern}:" <<< "$body" \
+               || grep -qF "name: $context" <<< "$body"; then
+                return 0
+            fi
+        done
+    done
+    return 1
 }
 
 ruleset_id_named() {
@@ -132,7 +187,13 @@ for repo in $(jq -r '.repos | keys[]' "$POLICY"); do
         safe=()
         for check in "${wanted[@]:-}"; do
             [[ -z "$check" ]] && continue
-            if grep -qxF "$check" <<< "$seen"; then
+            # Necessary in both tiers: a context the base branch does not
+            # declare cannot report on a pull request into it, however many
+            # times it has reported elsewhere.
+            if ! declared_in_repo "$repo" "$check"; then
+                echo "   ! $branch — withholding '$check': no workflow in this repository declares it"
+                withheld_total=$((withheld_total + 1))
+            elif grep -qxF "$check" <<< "$seen"; then
                 safe+=("$check")                       # tier 1
             elif [[ -n "$verified" ]]; then
                 safe+=("$check")                       # tier 2
@@ -153,6 +214,29 @@ for repo in $(jq -r '.repos | keys[]' "$POLICY"); do
 
         case "$MODE" in
         verify)
+            # A required context that is not reporting on an OPEN pull request
+            # is the deadlock this script exists to prevent, seen from the other
+            # end. It cannot always be predicted when the ruleset is written —
+            # a branch cut before the job existed carries no workflow that
+            # produces it — so it is detected here instead, where the fix is
+            # obvious: update the branch from base, or merge the PR that adds
+            # the job.
+            while IFS=$'\t' read -r pr_num pr_sha; do
+                [[ -z "$pr_num" ]] && continue
+                # </dev/null matters: without it `gh` inherits the loop's
+                # stdin and eats the next line of the pull-request list, so the
+                # loop reads a number that never came out of `gh pr list`.
+                reported="$(gh api "repos/$OWNER/$repo/commits/$pr_sha/check-runs?per_page=100" \
+                            --jq '.check_runs[].name' </dev/null 2>/dev/null | sort -u)"
+                for check in "${safe[@]:-}"; do
+                    [[ -z "$check" ]] && continue
+                    grep -qxF "$check" <<< "$reported" && continue
+                    echo "   ✗ $branch — PR #$pr_num is stuck: '$check' is required and has not reported"
+                    exit_code=1
+                done
+            done < <(gh pr list --repo "$OWNER/$repo" --base "$branch" --state open \
+                       --json number,headRefOid --jq '.[] | [.number, .headRefOid] | @tsv' 2>/dev/null)
+
             if [[ -z "$id" ]]; then
                 echo "   ✗ $branch — no '$name' ruleset"
                 exit_code=1
