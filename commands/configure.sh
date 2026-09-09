@@ -120,8 +120,10 @@ load_config() {
         key="${line%%=*}"
         value="${line#*=}"
 
-        key="$(echo "$key" | xargs)"
-        value="$(echo "$value" | sed 's/#.*$//' | xargs)"
+        # Same parser as lib/config.sh — see _config_clean_value() there for
+        # why this is not `xargs`.
+        key="$(trim "$key")"
+        value="$(_config_clean_value "$value")"
 
         CONFIG_VALUES["$key"]="$value"
     done < "$file"
