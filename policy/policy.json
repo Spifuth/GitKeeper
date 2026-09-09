@@ -137,17 +137,16 @@
         "main": {
           "checks": [
             "lint",
-            "test",
-            "example-report"
+            "test"
           ],
           "verified": "2026-09-09 — ci.yml: pull_request.branches = [main]"
         },
         "dev": {
           "checks": [],
-          "blocked_on": "ci.yml's pull_request trigger lists [main] only, so no check would ever report on a PR to dev and requiring one would deadlock the branch. PR #3 widens it to [main, dev]; once merged, restore [\"lint\", \"test\", \"example-report\"] here and re-run."
+          "blocked_on": "ci.yml's pull_request trigger lists [main] only, so no check would ever report on a PR to dev and requiring one would deadlock the branch. PR #3 widens it to [main, dev]; once merged, restore [\"lint\", \"test\"] here and re-run."
         }
       },
-      "note": "release.yml is deliberately absent from the checks: it triggers on pushes to main and via workflow_dispatch, never on a pull request."
+      "note": "Two jobs are deliberately absent from the required checks. `release` never runs on a pull request. And `example-report` calls the live open-meteo API: it failed on a 502 during PR #3 on 2026-09-09, with nothing wrong in the code. A required check that reaches a third party gates your merges on somebody else's uptime — keep it running and visible, never required."
     }
   },
   "excluded": {
