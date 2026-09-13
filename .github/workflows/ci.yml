@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  shellcheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - name: Lint all shell sources
+        # -S error: at -S warning, 7 findings surface (5 confirmed non-issues, 2 of
+        # which are real dead-flag bugs left for a human to triage, not "fixed" here).
+        # --exclude=SC1087: shellcheck's exit code ignores -S for pass/fail purposes,
+        # so the 2 SC1087 hits in rules/secrets.sh (also error-severity) would fail
+        # the build even at -S error. Both were verified false positives (git ref
+        # syntax / regex bracket-expression parsing, not bugs) before excluding.
+        # See PR description for full counts and investigation.
+        run: shellcheck -S error --exclude=SC1087 gitkeeper $(find lib rules commands -name '*.sh')
+
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install bats-core
+        # Cloned rather than pulled from a third-party action: this repository
+        # is a secret scanner, and the shorter its CI supply chain the better.
+        # Pinned to a tag so a compromised upstream default branch cannot walk
+        # straight into the job.
+        run: |
+          git clone --depth 1 --branch v1.14.0 \
+            https://github.com/bats-core/bats-core.git "$RUNNER_TEMP/bats"
+          echo "$RUNNER_TEMP/bats/bin" >> "$GITHUB_PATH"
+      - name: Run the test suite
+        run: bats --recursive tests/

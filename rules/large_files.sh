@@ -28,11 +28,7 @@ rule_large_files() {
         [[ ! -f "$file" ]] && continue
         
         local size
-        # Linux stat
-        size="$(stat -c%s "$file" 2>/dev/null)" || \
-        # macOS stat
-        size="$(stat -f%z "$file" 2>/dev/null)" || \
-        size=0
+        size="$(stat -c%s "$file" 2>/dev/null || stat -f%z "$file" 2>/dev/null || echo 0)"
         
         if [[ $size -gt $max_size ]]; then
             found=1

@@ -15,9 +15,10 @@ declare -A RULE_DESCRIPTIONS=(
     [branch_name]="Enforce branch naming conventions"
     [large_files]="Prevent large files from being committed"
     [merge_conflict]="Detect leftover merge conflict markers"
+    [no_debug]="Block debug statements (console.log, pdb, var_dump, …)"
 )
 
-RULE_ORDER=(secrets forbid_files merge_conflict large_files changelog version readme todos branch_name)
+RULE_ORDER=(secrets forbid_files merge_conflict large_files no_debug changelog version readme todos branch_name)
 
 #------------------------------------------------------------------------------
 # Menu helpers
@@ -28,7 +29,7 @@ clear_screen() {
     [[ -t 1 ]] && clear
 }
 
-print_header() {
+print_wizard_header() {
     echo ""
     echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${BOLD}  $1${NC}"
@@ -112,13 +113,18 @@ load_config() {
         return 0
     fi
     
-    while IFS='=' read -r key value || [[ -n "$key" ]]; do
-        [[ "$key" =~ ^[[:space:]]*# ]] && continue
-        [[ -z "$key" ]] && continue
-        
-        key="$(echo "$key" | xargs)"
-        value="$(echo "$value" | sed 's/#.*$//' | xargs)"
-        
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        [[ "$line" =~ ^[[:space:]]*# ]] && continue
+        [[ -z "$line" ]] && continue
+
+        key="${line%%=*}"
+        value="${line#*=}"
+
+        # Same parser as lib/config.sh — see _config_clean_value() there for
+        # why this is not `xargs`.
+        key="$(trim "$key")"
+        value="$(_config_clean_value "$value")"
+
         CONFIG_VALUES["$key"]="$value"
     done < "$file"
 }
@@ -197,7 +203,7 @@ toggle_rule() {
 menu_main() {
     while true; do
         clear_screen
-        print_header "GitKeeper Configuration"
+        print_wizard_header "GitKeeper Configuration"
         
         echo -e "  Config: ${CYAN}${CONFIG_FILE:-<not set>}${NC}"
         [[ $CONFIG_MODIFIED -eq 1 ]] && echo -e "  ${YELLOW}(unsaved changes)${NC}"
@@ -238,7 +244,7 @@ menu_main() {
 menu_rules() {
     while true; do
         clear_screen
-        print_header "Enable/Disable Rules"
+        print_wizard_header "Enable/Disable Rules"
         
         echo "  Toggle rules on/off by entering their number."
         echo ""
@@ -290,7 +296,7 @@ menu_rules() {
 menu_behavior() {
     while true; do
         clear_screen
-        print_header "Behavior Settings"
+        print_wizard_header "Behavior Settings"
         
         # fail_on
         echo -e "  ${BOLD}When to fail:${NC}"
@@ -359,7 +365,7 @@ menu_behavior() {
 menu_parameters() {
     while true; do
         clear_screen
-        print_header "Rule Parameters"
+        print_wizard_header "Rule Parameters"
         
         echo "  Custom patterns and settings for rules."
         echo ""
