@@ -111,7 +111,21 @@ stash_fail_on=warn
 #      while the rule still reports a clean pass. Escape it as \" -- as below.
 #      Caught 2026-09-04 by planting each credential individually; the
 #      unescaped version missed the AWS key and the JWT while printing a tick.
-pattern_secrets=BEGIN [A-Z ]*PRIVATE KEY,aws_secret_access_key['\"]?\s*[=:]\s*['\"]?[A-Za-z0-9/+=]{40},eyJ[A-Za-z0-9_-]{10}[A-Za-z0-9_-]*\.eyJ[A-Za-z0-9_-]{10}[A-Za-z0-9_-]*\.,[MNO][A-Za-z0-9_-]{23}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{27},hooks\.slack\.com/services/T[A-Za-z0-9]{8},sk-ant-[A-Za-z0-9_-]{24},sk-proj-[A-Za-z0-9_-]{20},AIza[A-Za-z0-9_-]{35},SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43},[0-9]{9}:AA[A-Za-z0-9_-]{33},st\.[A-Za-z0-9._-]{20},_authToken\s*=\s*[A-Za-z0-9_-]{20}
+#
+# THE INFISICAL PATTERN IS SHAPED, NOT JUST PREFIXED. It used to be the literal
+# `st.` plus twenty word characters -- and ordinary text has exactly that shape.
+# On 2026-09-13 it rejected a push for `-o merge_request.remove_source_branch`
+# in a plan document, then did it twice more; one of those pushes was made with
+# --no-verify, which is what a gate that cries wolf teaches people to do.
+#
+# A real service token, read from Infisical's own source (v0.162.19), is
+# st.<id>.<secret> as minted, plus a .<key> segment in the copy handed to a
+# user. The id is a UUID (36 chars; a 24-char ObjectId on older instances), and
+# the secret and key are 32 hex chars each. So the pattern now demands an id of
+# 24+ characters, a dot, then a 32-character secret: every real token matches,
+# and so far no prose does. tests/rules/test_secrets.bats plants each form ALONE
+# and the false positives above, and re-checks every other type on this line.
+pattern_secrets=BEGIN [A-Z ]*PRIVATE KEY,aws_secret_access_key['\"]?\s*[=:]\s*['\"]?[A-Za-z0-9/+=]{40},eyJ[A-Za-z0-9_-]{10}[A-Za-z0-9_-]*\.eyJ[A-Za-z0-9_-]{10}[A-Za-z0-9_-]*\.,[MNO][A-Za-z0-9_-]{23}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{27},hooks\.slack\.com/services/T[A-Za-z0-9]{8},sk-ant-[A-Za-z0-9_-]{24},sk-proj-[A-Za-z0-9_-]{20},AIza[A-Za-z0-9_-]{35},SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43},[0-9]{9}:AA[A-Za-z0-9_-]{33},st\.[A-Za-z0-9_-]{24}[A-Za-z0-9_-]*\.[A-Za-z0-9_-]{32},_authToken\s*=\s*[A-Za-z0-9_-]{20}
 
 # --- forbid_files ------------------------------------------------------------
 #
