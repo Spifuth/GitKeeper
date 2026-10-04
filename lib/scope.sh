@@ -58,6 +58,69 @@ _apply_file_filter() {
 }
 
 #------------------------------------------------------------------------------
+# Push ranges
+#
+# The push scope is the commits being pushed, not "everything since main".
+# It used to fall back to a hardcoded `origin/main` whenever a branch had no
+# upstream, so the first push of every new branch re-scanned everything `dev`
+# carries ahead of `main` — and one false positive on `dev` blocked every
+# branch in the repo, whatever it contained.
+#------------------------------------------------------------------------------
+
+# Base of the commits reachable from $1 that no remote-tracking ref has.
+# Prints nothing and returns 1 when the remote already has all of them.
+_unpushed_base() {
+    local tip="$1"
+    local first
+    first="$(git rev-list --reverse --topo-order "$tip" --not --remotes 2>/dev/null | head -n 1)"
+    [[ -z "$first" ]] && return 1
+
+    if git rev-parse -q --verify "${first}^" >/dev/null 2>&1; then
+        git rev-parse "${first}^"
+    else
+        # A root commit: diff against the empty tree.
+        git hash-object -t tree /dev/null
+    fi
+}
+
+# Reads git's pre-push stdin — "<local ref> <local sha> <remote ref> <remote sha>"
+# per line — and prints one "base..tip" range per ref that actually sends commits.
+# Deletions, and new refs whose commits the remote already has, print nothing.
+resolve_push_ranges() {
+    local local_sha remote_sha base
+    # -t: never hang on a stdin that is a pipe nobody closes.
+    while read -r -t 10 _ local_sha _ remote_sha; do
+        [[ "$local_sha" =~ ^[0-9a-f]{40,64}$ ]] || continue
+        [[ "$local_sha" =~ ^0+$ ]] && continue
+
+        if [[ ! "$remote_sha" =~ ^0+$ ]] \
+            && git cat-file -e "${remote_sha}^{commit}" 2>/dev/null; then
+            echo "${remote_sha}..${local_sha}"
+        elif base="$(_unpushed_base "$local_sha")"; then
+            echo "${base}..${local_sha}"
+        fi
+    done
+    return 0
+}
+
+# The ranges the push scope covers, one per line. GITKEEPER_PUSH_RANGES (set
+# from the pre-push hook's stdin by cmd_check) wins; otherwise the upstream;
+# otherwise only what no remote has yet.
+_push_ranges() {
+    if [[ -n "${GITKEEPER_PUSH_RANGES+set}" ]]; then
+        [[ -n "$GITKEEPER_PUSH_RANGES" ]] && echo "$GITKEEPER_PUSH_RANGES"
+        return 0
+    fi
+
+    local upstream base
+    if upstream="$(git rev-parse --abbrev-ref '@{upstream}' 2>/dev/null)"; then
+        echo "${upstream}..HEAD"
+    elif base="$(_unpushed_base HEAD)"; then
+        echo "${base}..HEAD"
+    fi
+}
+
+#------------------------------------------------------------------------------
 # Scope resolution
 #------------------------------------------------------------------------------
 
@@ -65,11 +128,7 @@ get_scope_range() {
     local scope="$1"
     case "$scope" in
         staged)  echo "--cached" ;;
-        push)
-            local upstream
-            upstream="$(git rev-parse --abbrev-ref '@{upstream}' 2>/dev/null || echo 'origin/main')"
-            echo "${upstream}..HEAD"
-            ;;
+        push)    _push_ranges | paste -sd ' ' - ;;
         pr)
             local base="${GITKEEPER_PR_BASE:-origin/main}"
             echo "${base}...HEAD"
@@ -90,9 +149,13 @@ get_scope_files() {
             raw_files="$(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null)"
             ;;
         push)
-            local upstream
-            upstream="$(git rev-parse --abbrev-ref '@{upstream}' 2>/dev/null || echo 'origin/main')"
-            raw_files="$(git diff --name-only "${upstream}..HEAD" 2>/dev/null)"
+            # ACMR, like staged: a file the push deletes is not a file it adds.
+            local range
+            raw_files="$(
+                while IFS= read -r range; do
+                    [[ -n "$range" ]] && git diff --name-only --diff-filter=ACMR "$range" 2>/dev/null
+                done < <(_push_ranges) | sort -u
+            )"
             ;;
         pr)
             local base="${GITKEEPER_PR_BASE:-origin/main}"
@@ -144,9 +207,10 @@ get_scope_diff() {
             _git_diff_with_pathspec git diff --cached
             ;;
         push)
-            local upstream
-            upstream="$(git rev-parse --abbrev-ref '@{upstream}' 2>/dev/null || echo 'origin/main')"
-            _git_diff_with_pathspec git diff "${upstream}..HEAD"
+            local range
+            while IFS= read -r range; do
+                [[ -n "$range" ]] && _git_diff_with_pathspec git diff "$range"
+            done < <(_push_ranges)
             ;;
         pr)
             local base="${GITKEEPER_PR_BASE:-origin/main}"

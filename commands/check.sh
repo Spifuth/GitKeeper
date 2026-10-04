@@ -28,6 +28,21 @@ cmd_check() {
         die "invalid scope: $scope"
     fi
 
+    # ── Pre-push: scan the refs git says it is pushing ─────────────────────
+    # The hook execs us with git's ref lines still on stdin. Only well-formed
+    # lines count, so a stray pipe falls back to the upstream-based range
+    # rather than to "nothing to check".
+    if [[ "$scope" == "push" && ! -t 0 && -z "${GITKEEPER_PUSH_RANGES+set}" ]]; then
+        local push_line push_input=""
+        while IFS= read -r -t 10 push_line; do
+            push_input+="$push_line"$'\n'
+        done
+        if grep -Eq '^[^ ]+ [0-9a-f]{40,64} [^ ]+ [0-9a-f]{40,64}$' <<< "$push_input"; then
+            GITKEEPER_PUSH_RANGES="$(resolve_push_ranges <<< "$push_input")"
+            export GITKEEPER_PUSH_RANGES
+        fi
+    fi
+
     # ── Find and load root config ──────────────────────────────────────────
     local root_config=""
     if root_config="$(find_config)"; then
