@@ -2,6 +2,11 @@
   "$comment": [
     "Target branch-protection state for every public repository on this account.",
     "",
+    "Depuis le 2026-09-09 ce fichier couvre AUSSI les dépôts privés. Ce n'était",
+    "pas une limite de plan : Hawkeye, privé, portait déjà des rulesets actifs. Le",
+    "seul 403 « Upgrade to GitHub Pro » vient de SQ25A3S1008-Castellum, un fork",
+    "d'organisation où ce compte n'est pas admin — il reste hors périmètre.",
+    "",
     "ONE RULESET PER BRANCH, named protected-<branch>. A ruleset applies one set",
     "of rules to every ref it covers, so main and dev cannot require different",
     "checks inside a single one — and they routinely need to, because a CI",
@@ -24,7 +29,14 @@
     "  tier 2  a branch's `verified` field records a human reading the workflow",
     "          trigger and confirming it covers THAT branch, with the date",
     "",
-    "Anything with neither is withheld and printed. Re-run after a CI change."
+    "Anything with neither is withheld and printed. Re-run after a CI change.",
+    "",
+    "`protect_tags: true` ajoute un ruleset `protected-tags` : un tag ne peut plus",
+    "être ni supprimé ni déplacé. N'est posé que sur les dépôts qui publient",
+    "réellement par tag (AutoVault, City-Compare), parce qu'ailleurs il ne ferait",
+    "que gêner un nettoyage. Ce qu'il empêche : réécrire un tag de release, donc",
+    "faire diverger la version que quelqu'un a installée du code qu'elle prétend",
+    "porter — sans laisser de trace."
   ],
   "repos": {
     "brutalist-lycee": {
@@ -109,7 +121,8 @@
           "verified": "2026-09-09 — tests.yml: pull_request.branches = [main, dev]"
         }
       },
-      "note": "tests.yml produces 12 contexts; only the aggregate 'CI Summary' is required. release.yml is deliberately absent — it triggers on v* tags only, so requiring it would block every pull request forever."
+      "note": "tests.yml produces 12 contexts; only the aggregate 'CI Summary' is required. release.yml is deliberately absent — it triggers on v* tags only, so requiring it would block every pull request forever.",
+      "protect_tags": true
     },
     "SockMap": {
       "branches": {
@@ -137,16 +150,187 @@
         "main": {
           "checks": [
             "lint",
-            "test"
+            "test",
+            "example-report"
           ],
-          "verified": "2026-09-09 — ci.yml: pull_request.branches = [main]"
+          "verified": "2026-09-09 — ci.yml: pull_request.branches = [main, dev] depuis PR #3"
         },
         "dev": {
-          "checks": [],
-          "blocked_on": "ci.yml's pull_request trigger lists [main] only, so no check would ever report on a PR to dev and requiring one would deadlock the branch. PR #3 widens it to [main, dev]; once merged, restore [\"lint\", \"test\"] here and re-run."
+          "checks": [
+            "lint",
+            "test",
+            "example-report"
+          ],
+          "verified": "2026-09-09 — ci.yml: pull_request.branches = [main, dev] depuis PR #3"
         }
       },
-      "note": "Two jobs are deliberately absent from the required checks. `release` never runs on a pull request. And `example-report` calls the live open-meteo API: it failed on a 502 during PR #3 on 2026-09-09, with nothing wrong in the code. A required check that reaches a third party gates your merges on somebody else's uptime — keep it running and visible, never required."
+      "note": "`release` reste hors des checks requis : il ne tourne jamais sur une pull request. `example-report` y est revenu le 2026-09-09 après City-Compare#4 : il appelle Nominatim et Open-Meteo, mais une panne de l'un ou l'autre sort désormais en EX_TEMPFAIL (75) et l'étape CI la traite comme un saut avec une annotation. Il ne peut donc plus échouer sur la disponibilité d'un tiers — seulement sur une vraie régression, ce qui est exactement ce qu'un check requis doit faire. Avant ce correctif il était retiré, et il avait raison de l'être.",
+      "protect_tags": true
+    },
+    "understory": {
+      "branches": {
+        "dev": {
+          "checks": []
+        },
+        "main": {
+          "checks": []
+        }
+      },
+      "note": "Aucun workflow. Les règles de branche restent utiles sans check : pas de suppression, pas de force-push, pas de push direct."
+    },
+    "lycee-bot": {
+      "branches": {
+        "dev": {
+          "checks": [
+            "lint",
+            "test"
+          ],
+          "verified": "2026-09-09 — ci.yml: pull_request sans filtre de branches, donc couvre toutes les branches protégées"
+        },
+        "main": {
+          "checks": [
+            "lint",
+            "test"
+          ],
+          "verified": "2026-09-09 — ci.yml: pull_request sans filtre de branches, donc couvre toutes les branches protégées"
+        }
+      }
+    },
+    "wheel-app": {
+      "branches": {
+        "dev": {
+          "checks": [
+            "build"
+          ],
+          "verified": "2026-09-09 — ci.yml: pull_request sans filtre de branches, donc couvre toutes les branches protégées"
+        },
+        "main": {
+          "checks": [
+            "build"
+          ],
+          "verified": "2026-09-09 — ci.yml: pull_request sans filtre de branches, donc couvre toutes les branches protégées"
+        }
+      },
+      "note": "Le déclencheur `push` liste `[master]`, une branche qui n'existe pas ici — la CI ne tourne donc que sur les pull requests. À corriger un jour ; sans effet sur cette politique, qui ne parle que des PR."
+    },
+    "quartz": {
+      "branches": {
+        "dev": {
+          "checks": []
+        },
+        "main": {
+          "checks": []
+        }
+      },
+      "note": "Aucun workflow."
+    },
+    "la-taverne": {
+      "branches": {
+        "master": {
+          "checks": [
+            "backend",
+            "frontend"
+          ],
+          "verified": "2026-09-09 — ci.yml: pull_request sans filtre de branches, donc couvre toutes les branches protégées"
+        }
+      },
+      "note": "Branche par défaut `master`, pas de `main` ni de `dev`."
+    },
+    "heolstor-ui": {
+      "branches": {
+        "dev": {
+          "checks": []
+        },
+        "main": {
+          "checks": []
+        }
+      },
+      "note": "Aucun workflow."
+    },
+    "Heolstor": {
+      "branches": {
+        "dev": {
+          "checks": [
+            "lint",
+            "test"
+          ],
+          "verified": "2026-09-09 — ci.yml: pull_request sans filtre de branches, donc couvre toutes les branches protégées"
+        },
+        "main": {
+          "checks": [
+            "lint",
+            "test"
+          ],
+          "verified": "2026-09-09 — ci.yml: pull_request sans filtre de branches, donc couvre toutes les branches protégées"
+        }
+      },
+      "note": "`update-pip-graph` est volontairement absent : c'est le job du graphe de dépendances Dependabot, il ne tourne pas sur une pull request."
+    },
+    "7DSAssistant": {
+      "branches": {
+        "main": {
+          "checks": [
+            "lint",
+            "test"
+          ],
+          "verified": "2026-09-09 — ci.yml: pull_request sans filtre de branches, donc couvre toutes les branches protégées"
+        }
+      },
+      "note": "Pas de branche `dev`."
+    },
+    "Cyber-Front-Page": {
+      "branches": {
+        "dev": {
+          "checks": [
+            "frontend",
+            "backend-audit",
+            "docker-image"
+          ],
+          "verified": "2026-09-09 — ci.yml: pull_request.branches = [dev, main]"
+        },
+        "main": {
+          "checks": [
+            "frontend",
+            "backend-audit",
+            "docker-image"
+          ],
+          "verified": "2026-09-09 — ci.yml: pull_request.branches = [dev, main]"
+        }
+      },
+      "note": "`build-and-push` de release.yml est volontairement absent : il se déclenche sur un push vers main et sur les tags `v*.*.*`, jamais sur une pull request."
+    },
+    "dotfiles": {
+      "branches": {
+        "dev": {
+          "checks": []
+        },
+        "main": {
+          "checks": []
+        }
+      },
+      "note": "Aucun workflow, et un dépôt de configuration personnelle : si la PR obligatoire te gêne ici, c'est la seule entrée que je retirerais."
+    },
+    "Hawkeye": {
+      "branches": {
+        "dev": {
+          "checks": []
+        },
+        "main": {
+          "checks": []
+        }
+      },
+      "note": "Portait déjà `Main Protect` et `Merge Protect`, tous deux sur `~ALL` avec un bypass `always` pour les rôles maintain ET admin — donc décoratifs pour le propriétaire, et interdisant le force-push sur les branches de travail alors qu'elles en ont besoin. Remplacés par la politique standard, qui protège moins de branches et les protège vraiment."
+    },
+    "The-Big-Crunch": {
+      "branches": {
+        "dev": {
+          "checks": []
+        },
+        "main": {
+          "checks": []
+        }
+      },
+      "note": "Un `ci.yml` existe mais n'a jamais rapporté de check ; le garde-fou du script les retiendrait de toute façon."
     }
   },
   "excluded": {

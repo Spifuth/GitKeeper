@@ -120,6 +120,29 @@ declared_in_repo() {
     return 1
 }
 
+# Reports a legacy "classic" branch protection sitting on $1's branch $2.
+#
+# Classic branch protection and rulesets are two independent systems on the
+# same branch, and GitHub applies BOTH. `GET /repos/{owner}/{repo}/rulesets`
+# does not mention classic protection at all, so a `--verify` that only reads
+# rulesets reports a branch as correctly configured while a second, invisible
+# layer enforces something else entirely.
+#
+# That is not hypothetical. On 2026-09-09 this script reported brutalist-lycee
+# and lycee-bot as clean while a classic protection on both still demanded one
+# approving review — unsatisfiable for a sole collaborator, so every pull
+# request was blocked — and set `enforce_admins: false`, which exempted the
+# owner from the whole thing. The exact pair of faults the rulesets had just
+# been rewritten to remove, still in force, one API call away and unread.
+classic_protection() {
+    local repo="$1" branch="$2" json
+    json="$(gh api "repos/$OWNER/$repo/branches/$branch/protection" </dev/null 2>/dev/null)" || return 1
+    [[ -z "$json" ]] && return 1
+    printf '%s' "$json" | jq -e 'has("required_pull_request_reviews") or has("required_status_checks")' >/dev/null 2>&1 || return 1
+    printf '%s' "$json" | jq -r '"reviews=\(.required_pull_request_reviews.required_approving_review_count // "-") codeowner=\(.required_pull_request_reviews.require_code_owner_reviews // "-") enforce_admins=\(.enforce_admins.enabled // "-")"'
+    return 0
+}
+
 ruleset_id_named() {
     gh api "repos/$OWNER/$1/rulesets" \
         --jq ".[]? | select(.name == \"$2\") | .id" 2>/dev/null | head -1
@@ -159,6 +182,17 @@ build_payload() {
                  } } ]
            else [] end)
       )
+    }'
+}
+
+build_tag_payload() {
+    jq -n '{
+      name: "protected-tags",
+      target: "tag",
+      enforcement: "active",
+      bypass_actors: [],
+      conditions: { ref_name: { include: ["~ALL"], exclude: [] } },
+      rules: [ { type: "deletion" }, { type: "update" } ]
     }'
 }
 
@@ -214,6 +248,15 @@ for repo in $(jq -r '.repos | keys[]' "$POLICY"); do
 
         case "$MODE" in
         verify)
+            # Classic protection first: it is invisible to the rulesets API and
+            # it is applied on top of whatever a ruleset says.
+            if legacy="$(classic_protection "$repo" "$branch")"; then
+                echo "   ✗ $branch — a classic branch protection is ALSO in force ($legacy)"
+                echo "     rulesets and classic protection both apply; delete it or fold it in:"
+                echo "     gh api -X DELETE repos/$OWNER/$repo/branches/$branch/protection"
+                exit_code=1
+            fi
+
             # A required context that is not reporting on an OPEN pull request
             # is the deadlock this script exists to prevent, seen from the other
             # end. It cannot always be predicted when the ruleset is written —
@@ -266,6 +309,39 @@ for repo in $(jq -r '.repos | keys[]' "$POLICY"); do
             ;;
         esac
     done
+
+    # Tags, opt-in per repository. A tag ruleset has no status checks and no
+    # pull requests — the only thing worth saying about a release tag is that
+    # it may not be moved or deleted, so that the version somebody installed
+    # keeps pointing at the code it claimed to.
+    if [[ "$(jq -r --arg r "$repo" '.repos[$r].protect_tags // false' "$POLICY")" == "true" ]]; then
+        tag_id="$(ruleset_id_named "$repo" "protected-tags")"
+        case "$MODE" in
+        verify)
+            if [[ -z "$tag_id" ]]; then
+                echo "   ✗ tags — no 'protected-tags' ruleset"
+                exit_code=1
+            else
+                gh api "repos/$OWNER/$repo/rulesets/$tag_id" --jq \
+                  '"   ✓ tags id=\(.id) \(.enforcement) bypass=\(.bypass_actors|length) rules=\([.rules[].type]|join(\",\"))"'
+            fi
+            ;;
+        dry-run)
+            echo "   → tags: would $([[ -n "$tag_id" ]] && echo "update $tag_id" || echo "create")"
+            ;;
+        apply)
+            if [[ -n "$tag_id" ]]; then
+                build_tag_payload | gh api -X PUT "repos/$OWNER/$repo/rulesets/$tag_id" \
+                    --input - --jq '"   ✓ tags updated ruleset \(.id)"' || {
+                    echo "   ✗ tags — update failed"; exit_code=1; }
+            else
+                build_tag_payload | gh api -X POST "repos/$OWNER/$repo/rulesets" \
+                    --input - --jq '"   ✓ tags created ruleset \(.id)"' || {
+                    echo "   ✗ tags — create failed"; exit_code=1; }
+            fi
+            ;;
+        esac
+    fi
 done
 
 echo
