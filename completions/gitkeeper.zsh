@@ -52,8 +52,7 @@ _gitkeeper() {
                     ;;
                 install-hooks)
                     _arguments \
-                        '--hooks-dir=[Hooks directory]:directory:_directories' \
-                        '--link[Create symlinks instead of copies]'
+                        '--hooks-dir=[Hooks directory]:directory:_directories'
                     ;;
                 configure)
                     _arguments \

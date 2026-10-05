@@ -6,7 +6,6 @@
 
 cmd_install_hooks() {
     local hooks_dir=".githooks"
-    local link_mode=0
     
     # Parse arguments
     while [[ $# -gt 0 ]]; do
@@ -20,8 +19,12 @@ cmd_install_hooks() {
                 shift
                 ;;
             --link)
-                link_mode=1
-                shift
+                # Was accepted and ignored. Symlinked hooks are deliberately
+                # not offered: git silently skips a dangling hook symlink, so
+                # a moved or uninstalled gitkeeper (or a committed .githooks/
+                # cloned elsewhere) would switch the gate off without a word.
+                # The generated wrappers fail loudly instead.
+                die "--link is not supported: hooks are always written as wrappers that fail loudly if gitkeeper is missing"
                 ;;
             *)
                 die "unknown option: $1"
