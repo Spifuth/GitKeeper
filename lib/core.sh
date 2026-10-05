@@ -25,6 +25,9 @@ fi
 
 # Global state
 export GITKEEPER_VERBOSE="${GITKEEPER_VERBOSE:-0}"
+# Quiet mode (`check -q`): only warnings, failures and their details are
+# printed. Errors always reach the user, and exit codes are unaffected.
+export GITKEEPER_QUIET="${GITKEEPER_QUIET:-0}"
 export GITKEEPER_HAS_WARNINGS=0
 export GITKEEPER_HAS_ERRORS=0
 
@@ -32,11 +35,17 @@ export GITKEEPER_HAS_ERRORS=0
 # Logging
 #------------------------------------------------------------------------------
 
+is_quiet() {
+    [[ "${GITKEEPER_QUIET:-0}" -eq 1 ]]
+}
+
 log_info() {
+    is_quiet && return 0
     echo -e "${BLUE}ℹ${NC} $*"
 }
 
 log_success() {
+    is_quiet && return 0
     echo -e "${GREEN}✓${NC} $*"
 }
 
@@ -63,6 +72,7 @@ log_rule() {
     
     case "$status" in
         pass)
+            is_quiet && return 0
             echo -e "  ${GREEN}✓${NC} ${rule}${msg:+ — $msg}"
             ;;
         warn)
@@ -72,6 +82,7 @@ log_rule() {
             echo -e "  ${RED}✗${NC} ${rule}${msg:+ — $msg}"
             ;;
         skip)
+            is_quiet && return 0
             echo -e "  ${DIM}○${NC} ${rule}${msg:+ — $msg}"
             ;;
     esac
@@ -83,10 +94,18 @@ die() {
 }
 
 print_header() {
+    is_quiet && return 0
     echo -e "${BOLD}$*${NC}"
 }
 
+# Blank spacer line between output sections; suppressed in quiet mode.
+print_blank() {
+    is_quiet && return 0
+    echo ""
+}
+
 print_separator() {
+    is_quiet && return 0
     echo -e "${DIM}─────────────────────────────────────────${NC}"
 }
 

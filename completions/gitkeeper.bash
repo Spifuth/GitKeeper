@@ -57,7 +57,7 @@ _gitkeeper_completions() {
             esac
             
             if [[ "$cur" == -* ]]; then
-                COMPREPLY=($(compgen -W "--hooks-dir --link" -- "$cur"))
+                COMPREPLY=($(compgen -W "--hooks-dir" -- "$cur"))
             fi
             ;;
         

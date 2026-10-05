@@ -19,10 +19,15 @@ cmd_check() {
             --scope)       scope="$2";            shift 2 ;;
             --scope=*)     scope="${1#--scope=}";  shift   ;;
             -v|--verbose)  export GITKEEPER_VERBOSE=1; shift ;;
-            -q|--quiet)    quiet=1; export GITKEEPER_QUIET=1; shift ;;
+            -q|--quiet)    quiet=1; shift ;;
             *)             die "unknown option: $1" ;;
         esac
     done
+
+    # Exported so the shared log helpers (and rules) honour it.
+    if [[ $quiet -eq 1 ]]; then
+        export GITKEEPER_QUIET=1
+    fi
 
     if ! validate_scope "$scope"; then
         die "invalid scope: $scope"
@@ -53,7 +58,7 @@ cmd_check() {
 
     # ── Header ────────────────────────────────────────────────────────────
     print_header "GitKeeper Check"
-    echo ""
+    print_blank
     log_info "Scope: $(describe_scope "$scope")"
 
     local total_files
@@ -61,7 +66,7 @@ cmd_check() {
     log_info "Files: $total_files"
 
     [[ -n "$root_config" ]] && log_debug "Config: $root_config"
-    echo ""
+    print_blank
 
     # ── Gather all files and look for subdirectory configs ─────────────────
     local all_files
@@ -102,7 +107,7 @@ cmd_check() {
     # ── Multi-config path ──────────────────────────────────────────────────
     else
         log_info "Per-directory configs detected — running grouped checks"
-        echo ""
+        print_blank
 
         # Build groups: associative array of config_path → newline-delimited files
         declare -A config_groups=()
@@ -141,7 +146,7 @@ cmd_check() {
                 section_label="$(dirname "$config_key" | sed "s|^${repo_root}/||")"
             fi
 
-            echo ""
+            print_blank
             print_header "Rules — ${section_label}/ (${group_file_count} file(s))"
 
             if [[ "$config_key" != "$root_config" && "$config_key" != "__none__" ]]; then
@@ -178,7 +183,7 @@ cmd_check() {
     fi
 
     # ── Summary ────────────────────────────────────────────────────────────
-    echo ""
+    print_blank
     print_separator
 
     local status_parts=()
@@ -189,8 +194,8 @@ cmd_check() {
 
     local status_line
     status_line="$(IFS=', '; echo "${status_parts[*]}")"
-    echo -e "$status_line"
-    echo ""
+    is_quiet || echo -e "$status_line"
+    print_blank
 
     if [[ $grand_failed -gt 0 ]]; then
         log_error "Check failed"
